@@ -10,4 +10,10 @@
 !*/
 
 ### Above combination will ignore all files without extension ###
+
 *.dSYM/
+*.exe
+*.ilk
+*.obj
+*.pdb
+*.vscode/
