@@ -8,17 +8,22 @@
 #include <numeric>
 #include <chrono>
 #include <set>
+#include <tuple>
+#include <climits>
 
 using namespace std;
 
+static int MAX_CONNECTIONS_TESTING = 10;
 static int MAX_CONNECTIONS = 1000;
+static int MAX_INT_CONNECTIONS = INT_MAX;
+static int INPUT_SIZE = 1000; // Too lazy to get this properly
 
 int day8(vector<tuple<int, int, int>> input);
 uint64_t day8Part2(vector<tuple<int, int, int>> input);
 
 int main() {
   string myText;
-  ifstream MyReadFile("day8TestInput.txt");
+  ifstream MyReadFile("day8Input.txt");
   vector<tuple<int, int, int>> input;
 
   while (getline(MyReadFile, myText)) {
@@ -33,17 +38,17 @@ int main() {
     input.push_back(make_tuple(t1, t2, t3));
   }
 
-  cout << day8(input) << endl;
+  // cout << day8(input) << endl;
   cout << day8Part2(input) << endl;
 
   MyReadFile.close();
 }
 
 // Directly calculates Euclidiean distance of all points to each other
-multiset<tuple<float, int, int>> day8Euclidiean(vector<tuple<int, int, int>> input) {
+multiset<tuple<float, int, int, int, int>> day8Euclidiean(vector<tuple<int, int, int>> input) {
 
   // Max heap, but we only insert if its smaller than the max
-  multiset<tuple<float, int, int>> distances;
+  multiset<tuple<float, int, int, int, int>> distances;
 
   for (int i = 0; i < input.size(); i++) {
     for (int j = i + 1; j < input.size(); j++) {
@@ -57,11 +62,11 @@ multiset<tuple<float, int, int>> day8Euclidiean(vector<tuple<int, int, int>> inp
 
       float dist = sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2) + pow(z2 - z1, 2));
       //printf("i: %d, j: %d, dist: %f\n", i, j, dist);
-      if (distances.size() < MAX_CONNECTIONS)  {
-        distances.insert(make_tuple(dist, i, j));
+      if (distances.size() < MAX_INT_CONNECTIONS)  { // replace with constant you need for testing, part 1, and part 2
+        distances.insert(make_tuple(dist, i, j, x1, x2));
       } else if (get<0>(*distances.rbegin()) > dist) {
         distances.erase(--distances.end());;
-        distances.insert(make_tuple(dist, i, j));
+        distances.insert(make_tuple(dist, i, j, x1, x2));
       }
     }
   }
@@ -125,44 +130,49 @@ multiset<tuple<float, int, int>> day8Cosine(vector<tuple<int, int, int>> input) 
   return distances;
 }
 
+// Helper - Thanks ChatGPT
+void printSet(const std::set<int> &s) {
+    std::cout << "{ ";
+    for (int x : s) {
+        std::cout << x << " ";
+    }
+    std::cout << "}" << std::endl;
+}
+
 /*
 Euclid Time: 54 ms
 Cosine Time: 77 ns
 Euclid is more efficient in the end
 */
 int day8(vector<tuple<int, int, int>> input) {
-  multiset<tuple<float, int, int>> distances = day8Euclidiean(input);
+  multiset<tuple<float, int, int, int, int>> distances = day8Euclidiean(input); 
   // multiset<tuple<float, int, int>> distances = day8Cosine(input);
 
-  set<set<int>> circuits;
+  vector<set<int>> circuits;
 
-  for (tuple<float, int, int> distance: distances) {
+  for (tuple<float, int, int, int, int> distance: distances) {
     bool found = false;
-    set<int> foundCircuit;
+    vector<set<int>> foundCircuit;
+    vector<set<int>> newCircuits;
     for (set<int> circuit: circuits) {
       if (circuit.count(get<1>(distance)) != 0 || circuit.count(get<2>(distance)) != 0) {
-        // If we found a previous one, then we have to combine the sets
-        if (found) {
-          cout << "Found another set " << get<1>(distance) << ", " << get<2>(distance) << endl;
-          circuit.insert(foundCircuit.begin(), foundCircuit.end());
-          cout << "Combined set size" << circuit.size() << endl;
-          circuits.erase(foundCircuit);
-        } else {
-          cout << "Found a set " << get<1>(distance) << ", " << get<2>(distance) << endl;
-          cout << "New set size" << circuit.size() << endl;
-          circuit.insert(get<1>(distance));
-          circuit.insert(get<2>(distance));
-          found = true;
-        }
+        // If we see that an element exists, add it to circuits we have to merge
+        // cout << "Found a set to merge: " << get<1>(distance) << ", " << get<2>(distance) << " in ";
+        // printSet(circuit);
+        foundCircuit.push_back(circuit);
+      } else {
+        // Easiest solution is to just recreate the vector (I am not working with iterators!!)
+        newCircuits.push_back(circuit);
       }
     }
-    if (!found) {
-      set<int> newCircuit;
-      newCircuit.insert(get<1>(distance));
-      newCircuit.insert(get<2>(distance));
-      cout << get<1>(distance) << ", " << get<2>(distance) << endl;
-      circuits.insert(newCircuit);
+
+    // Merge all found circuits
+    set<int> merged = {get<1>(distance), get<2>(distance)};
+    for (set<int> fc: foundCircuit) {
+      merged.insert(fc.begin(), fc.end());
     }
+    newCircuits.push_back(merged);
+    circuits = newCircuits;
   }
 
   // Not most optimal but since its only 1000 connections we can do the easy solution
@@ -178,5 +188,44 @@ int day8(vector<tuple<int, int, int>> input) {
 }
 
 uint64_t day8Part2(vector<tuple<int, int, int>> input) {
-  return 0;
+  multiset<tuple<float, int, int, int, int>> distances = day8Euclidiean(input); 
+  // multiset<tuple<float, int, int>> distances = day8Cosine(input);
+
+  vector<set<int>> circuits;
+  pair<uint64_t, uint64_t> lastConnection = {0, 0};
+
+  for (tuple<float, int, int, int, int> distance: distances) {
+    bool found = false;
+    vector<set<int>> foundCircuit;
+    vector<set<int>> newCircuits;
+    for (set<int> circuit: circuits) {
+      if (circuit.count(get<1>(distance)) != 0 || circuit.count(get<2>(distance)) != 0) {
+        // If we see that an element exists, add it to circuits we have to merge
+        // cout << "Found a set to merge: " << get<1>(distance) << ", " << get<2>(distance) << " in ";
+        // printSet(circuit);
+        foundCircuit.push_back(circuit);
+      } else {
+        // Easiest solution is to just recreate the vector (I am not working with iterators!!)
+        newCircuits.push_back(circuit);
+      }
+    }
+
+    // Merge all found circuits
+    set<int> merged = {get<1>(distance), get<2>(distance)};
+    for (set<int> fc: foundCircuit) {
+      merged.insert(fc.begin(), fc.end());
+    }
+    if (merged.size() == INPUT_SIZE) {
+        cout << "Exceeded max connections with size: " << merged.size() << endl;
+        lastConnection = {get<3>(distance), get<4>(distance)};
+        break;
+    }
+    newCircuits.push_back(merged);
+    circuits = newCircuits;
+  }
+
+  uint64_t result = uint64_t(get<0>(lastConnection) * get<1>(lastConnection));
+  cout << lastConnection.first << ", " << lastConnection.second << endl;
+
+  return result;
 }
